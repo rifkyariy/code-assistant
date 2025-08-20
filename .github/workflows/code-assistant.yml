@@ -1,0 +1,33 @@
+# .github/workflows/code-assistant.yml
+
+name: 'Trigger Gemini API with CLI'
+
+# This allows you to run the workflow manually from the Actions tab
+on:
+  workflow_dispatch:
+
+jobs:
+  call-gemini-cli:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Set up a Python environment (required by the CLI tool)
+      - name: 'Set up Python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 2. Install the Gemini CLI package
+      - name: 'Install Gemini CLI'
+        run: pip install google-generativeai-cli
+
+      # 3. Run the Gemini CLI with your prompt
+      # The CLI automatically looks for the GEMINI_API_KEY environment variable.
+      - name: 'Call Gemini API'
+        run: |
+          gemini "You are a code review assistant.
+          Given the following git diff, please identify potential bugs or areas for improvement.
+          Diff:
+          $(git diff HEAD~1 HEAD)"
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
