@@ -2,41 +2,35 @@
 
 name: 'Analyze Commit on Push'
 
-# This section is updated to trigger the workflow
-# automatically on every push to the 'main' branch.
+# Trigger the workflow on every push to the 'main' branch
 on:
   push:
     branches:
       - main
 
 jobs:
-  call-gemini-cli:
+  analyze-commit:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Checkout repository code to access commit details
+      # 1. Checkout repository to access commit history
       - name: 'Checkout repository'
         uses: actions/checkout@v4
 
-      # 2. Set up a Python environment for the CLI
-      - name: 'Set up Python'
-        uses: actions/setup-python@v5
+      # 2. Set up Node.js environment (v20 or higher is required)
+      - name: 'Set up Node.js'
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: '20'
 
-      # 3. Install the Gemini CLI
-      - name: 'Install Gemini CLI'
-        run: pip install google-generativeai-cli
-
-      # 4. Get the latest commit message
+      # 3. Get the latest commit message
       - name: 'Get latest commit message'
         id: commit
         run: echo "message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
 
-      # 5. Call Gemini API to analyze the commit message
-      #    This example asks Gemini to classify the commit.
+      # 4. Analyze the commit by running the CLI with npx
       - name: 'Analyze Commit with Gemini'
         run: |
-          gemini "You are an expert software engineer. Classify the following commit message. Is it a feature, a fix, a chore, docs, or a test? Explain your reasoning in one sentence. Commit Message: ${{ steps.commit.outputs.message }}"
+          npx @google/gemini-cli "Classify the following commit message. Is it a feature, fix, chore, docs, or test? Explain your reasoning in one sentence. Commit Message: ${{ steps.commit.outputs.message }}"
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
