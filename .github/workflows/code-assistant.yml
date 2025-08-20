@@ -1,33 +1,42 @@
 # .github/workflows/code-assistant.yml
 
-name: 'Trigger Gemini API with CLI'
+name: 'Analyze Commit on Push'
 
-# This allows you to run the workflow manually from the Actions tab
+# This section is updated to trigger the workflow
+# automatically on every push to the 'main' branch.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   call-gemini-cli:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Set up a Python environment (required by the CLI tool)
+      # 1. Checkout repository code to access commit details
+      - name: 'Checkout repository'
+        uses: actions/checkout@v4
+
+      # 2. Set up a Python environment for the CLI
       - name: 'Set up Python'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 2. Install the Gemini CLI package
+      # 3. Install the Gemini CLI
       - name: 'Install Gemini CLI'
         run: pip install google-generativeai-cli
 
-      # 3. Run the Gemini CLI with your prompt
-      # The CLI automatically looks for the GEMINI_API_KEY environment variable.
-      - name: 'Call Gemini API'
+      # 4. Get the latest commit message
+      - name: 'Get latest commit message'
+        id: commit
+        run: echo "message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+
+      # 5. Call Gemini API to analyze the commit message
+      #    This example asks Gemini to classify the commit.
+      - name: 'Analyze Commit with Gemini'
         run: |
-          gemini "You are a code review assistant.
-          Given the following git diff, please identify potential bugs or areas for improvement.
-          Diff:
-          $(git diff HEAD~1 HEAD)"
+          gemini "You are an expert software engineer. Classify the following commit message. Is it a feature, a fix, a chore, docs, or a test? Explain your reasoning in one sentence. Commit Message: ${{ steps.commit.outputs.message }}"
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
