@@ -9,22 +9,25 @@ on:
 
 jobs:
   summarize-commit:
+    # The job will run on a standard GitHub-hosted runner
     runs-on: ubuntu-latest
 
+    # This specifies the Docker container to use for the job
+    container:
+      image: node:20-slim # A lightweight official Node.js image
+
     steps:
+      # You still need to check out the repository's code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      # The "setup-node" step is no longer needed
 
-      # 1. UPDATED: Install the "gemi" package
+      # This command now runs inside the "node:20-slim" container
       - name: Install Gemini-CLI
         run: npm install -g gemi
 
-      # 2. UPDATED: Use the "gemi" command to run the prompt
+      # This command also runs inside the container
       - name: Generate Commit Summary
         run: |
           gemi -p "You are a helpful assistant writing release notes. Briefly summarize the following commit message in a single, clear sentence: ${{ github.event.head_commit.message }}" -k ${{ secrets.GEMINI_API_KEY }}
