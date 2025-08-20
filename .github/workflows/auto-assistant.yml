@@ -177,6 +177,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB__TOKEN: ${{ secrets.GH_APP_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node review.js
