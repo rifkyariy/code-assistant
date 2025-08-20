@@ -1,6 +1,6 @@
 # .github/workflows/auto-assistant.yml
 
-name: Gemini CLI Workflow
+name: Auto Assistant Workflow
 
 # Controls when the workflow will run
 on:
@@ -11,10 +11,9 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This job is named "run-gemini-cli"
-  run-gemini-cli:
+  # This job summarizes the latest commit
+  summarize-commit:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -30,13 +29,11 @@ jobs:
         with:
           node-version: '20' # Use a current LTS version of Node.js
 
-      # Installs the gemini-cli package globally
+      # Installs the correct gemini-cli package globally
       - name: Install Gemini-CLI
-        run: npm install -g gemini-cli
+        run: npm install -g google-gemini-cli
 
-      # Runs a simple Gemini prompt
-      - name: Run Gemini Prompt
-        run: gemini -p "Explain what a GitHub Action is in one sentence."
-        env:
-          # Pass the API key to the command as an environment variable
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Runs a dynamic Gemini prompt based on the commit message
+      - name: Generate Commit Summary
+        run: |
+          gemini -p "You are a helpful assistant writing release notes. Briefly summarize the following commit message in a single, clear sentence: ${{ github.event.head_commit.message }}" -k ${{ secrets.GEMINI_API_KEY }}
