@@ -1,36 +1,117 @@
-# .github/workflows/code-assistant.yml
+name: '🧐 Gemini AI Assistant'
 
-name: 'Analyze Commit on Push'
-
-# Trigger the workflow on every push to the 'main' branch
 on:
+  # Job 1 Trigger: Runs on pushes to the 'main' branch
   push:
     branches:
-      - main
+      - 'main'
+  
+  # Job 2 Trigger: Runs when a pull request is opened or updated for the 'main' branch
+  pull_request:
+    branches:
+      - 'main'
+
+# Permissions required for the jobs to post comments
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  analyze-commit:
+  #=================================================
+  # JOB 1: Summarize commit changes on push to main
+  #=================================================
+  summarize-push:
+    name: 'Summarize Push to Main'
+    # This job will only run for the 'push' event
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    
     steps:
-      # 1. Checkout repository to access commit history
       - name: 'Checkout repository'
         uses: actions/checkout@v4
+        with:
+          # Fetch the last 2 commits to be able to compare them
+          fetch-depth: 2
 
-      # 2. Set up Node.js environment (v20 or higher is required)
       - name: 'Set up Node.js'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 3. Get the latest commit message
-      - name: 'Get latest commit message'
-        id: commit
-        run: echo "message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
-
-      # 4. Analyze the commit by running the CLI with npx
-      - name: 'Analyze Commit with Gemini'
+      - name: 'Get commit changes'
+        id: get-diff
         run: |
-          npx @google/gemini-cli "Classify the following commit message. Is it a feature, fix, chore, docs, or test? Explain your reasoning in one sentence. Commit Message: ${{ steps.commit.outputs.message }}"
+          # Get the diff of the latest commit and store it in an output variable
+          # The EOF is used for multiline strings in GitHub Actions
+          echo "diff<<EOF" >> $GITHUB_OUTPUT
+          git diff HEAD~1 HEAD >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 'Generate summary with Gemini'
+        id: gemini-summary
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          COMMIT_DIFF: ${{ steps.get-diff.outputs.diff }}
+        run: |
+          SUMMARY=$(npx @google/gemini-cli "You are an expert programmer. Summarize the following code changes from a git diff in a few clear, concise bullet points. Diff:\n\n${COMMIT_DIFF}")
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "${SUMMARY}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 'Post summary as a commit comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: `### 🤖 Gemini Summary of Changes\n\n${{ steps.gemini-summary.outputs.summary }}`
+            });
+
+  #===================================================
+  # JOB 2: Review a pull request opened for main
+  #===================================================
+  review-pr:
+    name: 'Review Pull Request'
+    # This job will only run for the 'pull_request' event
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout repository'
+        uses: actions/checkout@v4
+
+      - name: 'Set up Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 'Get PR diff'
+        id: get-pr-diff
+        run: |
+          # Use the GitHub CLI to get the diff of the PR
+          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+          echo "diff_path=pr.diff" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 'Generate review with Gemini'
+        id: gemini-review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Pipe the diff file directly to the Gemini CLI
+          REVIEW=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli "You are an expert code reviewer. Analyze the following code changes. Provide feedback on potential bugs, style issues, and maintainability. Structure your response with a brief summary and then bullet points for specific suggestions. Do not comment on license headers.")
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "${REVIEW}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+      - name: 'Post review as a PR comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `### 🧐 Gemini Code Review\n\n${{ steps.gemini-review.outputs.review }}`
+            });
