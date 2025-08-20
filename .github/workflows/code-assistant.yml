@@ -22,14 +22,12 @@ jobs:
   #=================================================
   summarize-push:
     name: 'Summarize Push to Main'
-    # This job will only run for the 'push' event
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout repository'
         uses: actions/checkout@v4
         with:
-          # Fetch the last 2 commits to be able to compare them
           fetch-depth: 2
 
       - name: 'Set up Node.js'
@@ -50,7 +48,10 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           COMMIT_DIFF: ${{ steps.get-diff.outputs.diff }}
         run: |
-          SUMMARY=$(npx @google/gemini-cli "You are an expert programmer. Summarize the following code changes from a git diff in a few clear, concise bullet points. Diff:\n\n${COMMIT_DIFF}")
+          # CORRECTED COMMAND: Added --prompt flag and piped the diff
+          PROMPT="You are an expert programmer. Summarize the following code changes in a few clear, concise bullet points."
+          SUMMARY=$(echo "${COMMIT_DIFF}" | npx @google/gemini-cli --prompt "${PROMPT}")
+          
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "${SUMMARY}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -66,7 +67,6 @@ jobs:
               body: `### 🤖 Gemini Summary of Changes\n\n${{ steps.gemini-summary.outputs.summary }}`
             });
             
-      # ==> THIS STEP IS NEW FOR ERROR LOGGING <==
       - name: 'Post Failure Comment on Commit'
         if: failure()
         uses: actions/github-script@v7
@@ -84,7 +84,6 @@ jobs:
   #===================================================
   review-pr:
     name: 'Review Pull Request'
-    # This job will only run for the 'pull_request' event
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -109,7 +108,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          REVIEW=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli "You are an expert code reviewer. Analyze the following code changes. Provide feedback on potential bugs, style issues, and maintainability. Structure your response with a brief summary and then bullet points for specific suggestions. Do not comment on license headers.")
+          PROMPT="You are an expert code reviewer. Analyze the following code changes. Provide feedback on potential bugs, style issues, and maintainability. Structure your response with a brief summary and then bullet points for specific suggestions. Do not comment on license headers."
+          REVIEW=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli --prompt "${PROMPT}")
+          
           echo "review<<EOF" >> $GITHUB_OUTPUT
           echo "${REVIEW}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -125,7 +126,6 @@ jobs:
               body: `### 🧐 Gemini Code Review\n\n${{ steps.gemini-review.outputs.review }}`
             });
 
-      # ==> THIS STEP IS NEW FOR ERROR LOGGING <==
       - name: 'Post Failure Comment on PR'
         if: failure()
         uses: actions/github-script@v7
