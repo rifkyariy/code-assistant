@@ -1,17 +1,14 @@
 name: '🧐 Gemini AI Assistant'
 
 on:
-  # Job 1 Trigger: Runs on pushes to the 'main' branch
   push:
     branches:
       - 'main'
-  
-  # Job 2 Trigger: Runs when a pull request is opened or updated for the 'main' branch
   pull_request:
     branches:
       - 'main'
+      - 'test/shitty-code'
 
-# Permissions required for the jobs to post comments
 permissions:
   contents: write
   pull-requests: write
@@ -48,23 +45,25 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           COMMIT_DIFF: ${{ steps.get-diff.outputs.diff }}
         run: |
-          # CORRECTED COMMAND: Added --prompt flag and piped the diff
           PROMPT="You are an expert programmer. Summarize the following code changes in a few clear, concise bullet points."
           SUMMARY=$(echo "${COMMIT_DIFF}" | npx @google/gemini-cli --prompt "${PROMPT}")
-          
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "${SUMMARY}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      # ==> THIS STEP IS UPDATED <==
       - name: 'Post summary as a commit comment'
         uses: actions/github-script@v7
+        env:
+          SUMMARY_BODY: ${{ steps.gemini-summary.outputs.summary }}
         with:
           script: |
+            const body = `### 🤖 Gemini Summary of Changes\n\n${process.env.SUMMARY_BODY}`;
             github.rest.repos.createCommitComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               commit_sha: context.sha,
-              body: `### 🤖 Gemini Summary of Changes\n\n${{ steps.gemini-summary.outputs.summary }}`
+              body: body
             });
             
       - name: 'Post Failure Comment on Commit'
@@ -110,20 +109,23 @@ jobs:
         run: |
           PROMPT="You are an expert code reviewer. Analyze the following code changes. Provide feedback on potential bugs, style issues, and maintainability. Structure your response with a brief summary and then bullet points for specific suggestions. Do not comment on license headers."
           REVIEW=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli --prompt "${PROMPT}")
-          
           echo "review<<EOF" >> $GITHUB_OUTPUT
           echo "${REVIEW}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
+      # ==> THIS STEP IS UPDATED <==
       - name: 'Post review as a PR comment'
         uses: actions/github-script@v7
+        env:
+          REVIEW_BODY: ${{ steps.gemini-review.outputs.review }}
         with:
           script: |
+            const body = `### 🧐 Gemini Code Review\n\n${process.env.REVIEW_BODY}`;
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🧐 Gemini Code Review\n\n${{ steps.gemini-review.outputs.review }}`
+              body: body
             });
 
       - name: 'Post Failure Comment on PR'
