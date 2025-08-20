@@ -2,38 +2,29 @@
 
 name: Auto Assistant Workflow
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push events but only for the "main" branch
   push:
     branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
-  # This job summarizes the latest commit
   summarize-commit:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Sets up a Node.js environment for installing the CLI
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Use a current LTS version of Node.js
+          node-version: '20'
 
-      # Installs the correct gemini-cli package globally
+      # 1. UPDATED: Install the "gemi" package
       - name: Install Gemini-CLI
-        run: npm install -g google-gemini-cli
+        run: npm install -g gemi
 
-      # Runs a dynamic Gemini prompt based on the commit message
+      # 2. UPDATED: Use the "gemi" command to run the prompt
       - name: Generate Commit Summary
         run: |
-          gemini -p "You are a helpful assistant writing release notes. Briefly summarize the following commit message in a single, clear sentence: ${{ github.event.head_commit.message }}" -k ${{ secrets.GEMINI_API_KEY }}
+          gemi -p "You are a helpful assistant writing release notes. Briefly summarize the following commit message in a single, clear sentence: ${{ github.event.head_commit.message }}" -k ${{ secrets.GEMINI_API_KEY }}
