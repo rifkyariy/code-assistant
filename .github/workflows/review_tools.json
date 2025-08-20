@@ -1,0 +1,24 @@
+[
+  {
+    "name": "add_review_comment",
+    "description": "Adds a review comment to a specific line in a specific file of the pull request.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "The path of the file to comment on."
+        },
+        "line_number": {
+          "type": "number",
+          "description": "The line number in the file to comment on."
+        },
+        "comment_body": {
+          "type": "string",
+          "description": "The content of the review comment. This should be concise and constructive."
+        }
+      },
+      "required": ["file_path", "line_number", "comment_body"]
+    }
+  }
+]
