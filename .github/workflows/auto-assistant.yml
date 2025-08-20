@@ -9,25 +9,20 @@ on:
 
 jobs:
   summarize-commit:
-    # The job will run on a standard GitHub-hosted runner
     runs-on: ubuntu-latest
 
-    # This specifies the Docker container to use for the job
+    # UPDATED: Use the official Bun image which includes Node.js and npm
     container:
-      image: node:20-slim # A lightweight official Node.js image
+      image: oven/bun:1
 
     steps:
-      # You still need to check out the repository's code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # The "setup-node" step is no longer needed
-
-      # This command now runs inside the "node:20-slim" container
       - name: Install Gemini-CLI
         run: npm install -g gemi
 
-      # This command also runs inside the container
+      # This step will now succeed because Bun is available in the container
       - name: Generate Commit Summary
         run: |
           gemi -p "You are a helpful assistant writing release notes. Briefly summarize the following commit message in a single, clear sentence: ${{ github.event.head_commit.message }}" -k ${{ secrets.GEMINI_API_KEY }}
