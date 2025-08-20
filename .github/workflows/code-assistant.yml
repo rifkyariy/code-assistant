@@ -40,8 +40,6 @@ jobs:
       - name: 'Get commit changes'
         id: get-diff
         run: |
-          # Get the diff of the latest commit and store it in an output variable
-          # The EOF is used for multiline strings in GitHub Actions
           echo "diff<<EOF" >> $GITHUB_OUTPUT
           git diff HEAD~1 HEAD >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -67,6 +65,19 @@ jobs:
               commit_sha: context.sha,
               body: `### 🤖 Gemini Summary of Changes\n\n${{ steps.gemini-summary.outputs.summary }}`
             });
+            
+      # ==> THIS STEP IS NEW FOR ERROR LOGGING <==
+      - name: 'Post Failure Comment on Commit'
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: `❌ **Gemini Summary Failed!**\n\nAn error occurred while generating the summary. Please check the [Actions Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+            });
 
   #===================================================
   # JOB 2: Review a pull request opened for main
@@ -88,7 +99,6 @@ jobs:
       - name: 'Get PR diff'
         id: get-pr-diff
         run: |
-          # Use the GitHub CLI to get the diff of the PR
           gh pr diff ${{ github.event.pull_request.number }} > pr.diff
           echo "diff_path=pr.diff" >> $GITHUB_OUTPUT
         env:
@@ -99,7 +109,6 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # Pipe the diff file directly to the Gemini CLI
           REVIEW=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli "You are an expert code reviewer. Analyze the following code changes. Provide feedback on potential bugs, style issues, and maintainability. Structure your response with a brief summary and then bullet points for specific suggestions. Do not comment on license headers.")
           echo "review<<EOF" >> $GITHUB_OUTPUT
           echo "${REVIEW}" >> $GITHUB_OUTPUT
@@ -114,4 +123,17 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: `### 🧐 Gemini Code Review\n\n${{ steps.gemini-review.outputs.review }}`
+            });
+
+      # ==> THIS STEP IS NEW FOR ERROR LOGGING <==
+      - name: 'Post Failure Comment on PR'
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ **Gemini Review Failed!**\n\nAn error occurred during the code review. Please check the [Actions Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
             });
