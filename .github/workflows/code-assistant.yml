@@ -71,7 +71,7 @@ jobs:
               commit_sha: context.sha,
               body: `❌ **Gemini Summary Failed!**\n\nAn error occurred while generating the summary. Please check the [Actions Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
             });
-#===================================================
+  #===================================================
   # JOB 2: Review a pull request (UPGRADED)
   #===================================================
   review-pr:
@@ -95,13 +95,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      # ==> THIS STEP IS CORRECTED WITH A STRICTER PROMPT <==
       - name: 'Generate review with Gemini'
         id: gemini-review
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # Use a "here document" (cat <<'EOF') for safe multi-line string assignment.
           PROMPT=$(cat <<'EOF'
           You are an expert code reviewer. Your task is to provide a review by generating a single JSON object.
 
@@ -130,7 +128,6 @@ jobs:
           EOF
           )
           
-          # We now specify the model for better accuracy and pipe the diff to stdin
           GEMINI_OUTPUT=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli \
             --model "gemini-1.5-pro" \
             --prompt "${PROMPT}")
@@ -146,15 +143,44 @@ jobs:
         with:
           script: |
             const rawOutput = process.env.GEMINI_JSON_STRING;
-            const jsonStart = rawOutput.indexOf('{');
-            const jsonEnd = rawOutput.lastIndexOf('}') + 1;
-            const jsonString = rawOutput.substring(jsonStart, jsonEnd);
-            const reviewData = JSON.parse(jsonString);
+            
+            // 1. Check if the output is empty or null.
+            if (!rawOutput) {
+              console.log("Gemini returned no output. Skipping review.");
+              return;
+            }
+
+            let reviewData;
+            
+            // 2. Use a try-catch block to safely parse the JSON.
+            try {
+              const jsonStart = rawOutput.indexOf('{');
+              const jsonEnd = rawOutput.lastIndexOf('}') + 1;
+              
+              if (jsonStart === -1 || jsonEnd === 0) {
+                  throw new Error("No JSON object found in the output.");
+              }
+              
+              const jsonString = rawOutput.substring(jsonStart, jsonEnd);
+              reviewData = JSON.parse(jsonString);
+            } catch (error) {
+              console.error("Failed to parse JSON from Gemini output.", error);
+              console.log("Raw output was:", rawOutput);
+              // Optionally, post a comment indicating the failure to parse
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `⚠️ **Gemini Review Warning**\n\nThe AI reviewer did not return a valid JSON response and a review could not be created. Please check the Actions logs for details.`
+              });
+              return; // Exit the script gracefully
+            }
             
             const summary = reviewData.summary || "Gemini review complete.";
             const comments = reviewData.comments || [];
             
-            if (comments.length > 0 || summary) {
+            // 3. Only post if there's something to say.
+            if (comments.length > 0 || reviewData.summary) {
               await github.rest.pulls.createReview({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
