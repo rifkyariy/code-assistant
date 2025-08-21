@@ -43,7 +43,20 @@ jobs:
           COMMIT_DIFF: ${{ steps.get-diff.outputs.diff }}
         run: |
           PROMPT="You are an expert programmer. Summarize the following code changes in a few clear, concise bullet points."
-          SUMMARY=$(echo "${COMMIT_DIFF}" | npx @google/gemini-cli --prompt "${PROMPT}")
+          
+          # Try with Pro model first, redirecting stderr to capture any errors
+          SUMMARY=$(echo "${COMMIT_DIFF}" | npx @google/gemini-cli --model "gemini-1.5-pro" --prompt "${PROMPT}" 2>&1)
+          
+          # Check if the command failed ($?) and if the error is a rate limit (contains "429")
+          if [[ $? -ne 0 && "$SUMMARY" == *"429"* ]]; then
+            echo "Rate limit hit with gemini-1.5-pro. Retrying with gemini-1.5-flash..."
+            SUMMARY=$(echo "${COMMIT_DIFF}" | npx @google/gemini-cli --model "gemini-1.5-flash" --prompt "${PROMPT}")
+          elif [[ $? -ne 0 ]]; then
+            echo "An unexpected error occurred with Gemini CLI:"
+            echo "$SUMMARY"
+            exit 1 # Fail the step on other errors
+          fi
+
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "${SUMMARY}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -128,9 +141,23 @@ jobs:
           EOF
           )
           
+          # ==> THIS BLOCK IS UPDATED WITH THE FALLBACK LOGIC <==
+          # Try with Pro model first, redirecting stderr to capture any errors
           GEMINI_OUTPUT=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli \
-            --model "gemini-1.5-pro" \
-            --prompt "${PROMPT}")
+            --model "gemini-2.5-pro" \
+            --prompt "${PROMPT}" 2>&1)
+            
+          # Check if the command failed ($?) and if the error is a rate limit (contains "429")
+          if [[ $? -ne 0 && "$GEMINI_OUTPUT" == *"429"* ]]; then
+            echo "Rate limit hit with gemini-2.5-pro. Retrying with gemini-2.5-flash..."
+            GEMINI_OUTPUT=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli \
+              --model "gemini-2.5-flash" \
+              --prompt "${PROMPT}")
+          elif [[ $? -ne 0 ]]; then
+            echo "An unexpected error occurred with Gemini CLI:"
+            echo "$GEMINI_OUTPUT"
+            exit 1 # Fail the step on other errors
+          fi
             
           echo "review_json<<EOF" >> $GITHUB_OUTPUT
           echo "${GEMINI_OUTPUT}" >> $GITHUB_OUTPUT
@@ -144,7 +171,6 @@ jobs:
           script: |
             const rawOutput = process.env.GEMINI_JSON_STRING;
             
-            // 1. Check if the output is empty or null.
             if (!rawOutput) {
               console.log("Gemini returned no output. Skipping review.");
               return;
@@ -152,7 +178,6 @@ jobs:
 
             let reviewData;
             
-            // 2. Use a try-catch block to safely parse the JSON.
             try {
               const jsonStart = rawOutput.indexOf('{');
               const jsonEnd = rawOutput.lastIndexOf('}') + 1;
@@ -166,20 +191,18 @@ jobs:
             } catch (error) {
               console.error("Failed to parse JSON from Gemini output.", error);
               console.log("Raw output was:", rawOutput);
-              // Optionally, post a comment indicating the failure to parse
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
                 body: `⚠️ **Gemini Review Warning**\n\nThe AI reviewer did not return a valid JSON response and a review could not be created. Please check the Actions logs for details.`
               });
-              return; // Exit the script gracefully
+              return;
             }
             
             const summary = reviewData.summary || "Gemini review complete.";
             const comments = reviewData.comments || [];
             
-            // 3. Only post if there's something to say.
             if (comments.length > 0 || reviewData.summary) {
               await github.rest.pulls.createReview({
                 owner: context.repo.owner,
