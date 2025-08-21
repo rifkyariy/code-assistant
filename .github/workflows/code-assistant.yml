@@ -1,4 +1,4 @@
-name: '🧐 Gemini AI Assistant'
+name: 'Code Assistant: Code Review and Summary'
 
 on:
   push:
@@ -71,8 +71,7 @@ jobs:
               commit_sha: context.sha,
               body: `❌ **Gemini Summary Failed!**\n\nAn error occurred while generating the summary. Please check the [Actions Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
             });
-
-  #===================================================
+#===================================================
   # JOB 2: Review a pull request (UPGRADED)
   #===================================================
   review-pr:
@@ -82,10 +81,12 @@ jobs:
     steps:
       - name: 'Checkout repository'
         uses: actions/checkout@v4
+
       - name: 'Set up Node.js'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - name: 'Get PR diff'
         id: get-pr-diff
         run: |
@@ -94,7 +95,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      # ==> THIS STEP IS CORRECTED <==
+      # ==> THIS STEP IS CORRECTED WITH A STRICTER PROMPT <==
       - name: 'Generate review with Gemini'
         id: gemini-review
         env:
@@ -102,30 +103,37 @@ jobs:
         run: |
           # Use a "here document" (cat <<'EOF') for safe multi-line string assignment.
           PROMPT=$(cat <<'EOF'
-          You are an expert code reviewer. Analyze the following code changes from the git diff.
-          Your task is to provide a review by generating a single JSON object. Do not output any text before or after the JSON object.
-          The JSON object must have two top-level keys: "summary" and "comments".
-          1. The "summary" value should be a brief, high-level overview of your findings (2-3 sentences).
-          2. The "comments" value must be an array of comment objects.
-          3. Each comment object in the array must have three keys: "file_path" (string), "line_number" (integer), and "comment_body" (string).
-          4. For each specific suggestion you have, create one comment object. Ensure line numbers are accurate based on the diff.
-          5. If you have no suggestions, return an empty "comments" array.
+          You are an expert code reviewer. Your task is to provide a review by generating a single JSON object.
 
-          Here is the required JSON format:
+          **CRITICAL CONSTRAINTS:**
+          1.  For every comment you generate, the "comment_body" MUST be directly and strictly relevant to the code at the specified "file_path" and "line_number".
+          2.  Before creating a comment object, you MUST verify that the line number you've chosen is accurate based on the provided git diff.
+          3.  DO NOT invent problems. If the code change is simple and correct (e.g., fixing a typo or changing a CSS value), return an empty "comments" array.
+          4.  You MUST output only a single, valid JSON object and nothing else.
+
+          **JSON FORMAT:**
+          The JSON object must have two top-level keys: "summary" and "comments".
+          - "summary": A brief, high-level overview of your findings.
+          - "comments": An array of comment objects. Each object must have three keys: "file_path", "line_number", and "comment_body".
+
+          **EXAMPLE JSON:**
           {
-            "summary": "Your high-level summary here.",
+            "summary": "The changes look mostly good, but I have one suggestion for improving clarity.",
             "comments": [
               {
-                "file_path": "path/to/file.js",
+                "file_path": "src/app.js",
                 "line_number": 42,
-                "comment_body": "Your specific suggestion for this line."
+                "comment_body": "This variable could be renamed for better readability."
               }
             ]
           }
           EOF
           )
           
-          GEMINI_OUTPUT=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli --prompt "${PROMPT}")
+          # We now specify the model for better accuracy and pipe the diff to stdin
+          GEMINI_OUTPUT=$(cat ${{ steps.get-pr-diff.outputs.diff_path }} | npx @google/gemini-cli \
+            --model "gemini-1.5-pro" \
+            --prompt "${PROMPT}")
             
           echo "review_json<<EOF" >> $GITHUB_OUTPUT
           echo "${GEMINI_OUTPUT}" >> $GITHUB_OUTPUT
